@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DisplayBridge.Core</RootNamespace>
+    <!-- GdiScreenCapture (JPEG fallback path, session 4) needs
+         System.Drawing.Common's Bitmap/Graphics.CopyFromScreen, which are
+         Windows-only APIs. This project isn't a -windows TFM (it's shared
+         with Core.Tests which doesn't need WinForms/GDI), so silence the
+         CA1416 platform-compat warning rather than retargeting the whole
+         project (the app only ever runs on Windows anyway; Host is
+         net8.0-windows). -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Việc 1 (JPEG fallback capture, no native C++ needed): Graphics.CopyFromScreen + JPEG encode. -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+<Window x:Class="DisplayBridge.Host.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DisplayBridge Host" Height="200" Width="360">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" x:Name="StatusText" Text="DisplayBridge Host — chưa kết nối"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   FontSize="16" />
+        <Button Grid.Row="1" x:Name="SettingsButton" Content="Settings..."
+                HorizontalAlignment="Center" Margin="0,0,0,16" Width="120"
+                Click="SettingsButton_Click" />
+    </Grid>
+</Window>

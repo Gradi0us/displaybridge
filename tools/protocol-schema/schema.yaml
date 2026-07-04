@@ -1,0 +1,163 @@
+# DisplayBridge Protocol Schema v0
+# Single source of truth for the control-socket message set and the
+# video-socket frame header. `generate.py` reads this file and emits
+# byte-identical C# (pc-host) and Kotlin (android-client) code so the two
+# sides of the wire can never drift from each other.
+#
+# Wire conventions (apply to everything below unless stated otherwise):
+#   - byte order: little-endian
+#   - every CONTROL message on the wire is framed as:
+#         [u8 type][u16 payloadLength][payload bytes...]
+#     `type` and `payloadLength` are NOT part of the per-message `fields`
+#     list below; the generated Serialize/Deserialize code adds them.
+#   - VIDEO frames are NOT type-prefixed (the video socket only ever
+#     carries frames); see `video_frame` section below.
+#
+# Field type vocabulary (`type` key):
+#   u8, u16, u32, u64   fixed-width unsigned integers
+#   varint              unsigned LEB128 varint (7 bits/byte, MSB = continue)
+#   string              u16 byte-length prefix + UTF-8 bytes (no NUL)
+#   bytes               u16 byte-length prefix + raw bytes
+#   list                u16 element-count prefix + elements; needs `item_type`
+#     item_type: u8|u16|u32|u64|varint   -> list of that primitive
+#     item_type: keyvalue                -> list of {key: u8, value: varint}
+#       (used for the generic settings bag in CONFIG_UPDATE)
+#     item_type: touch_event             -> list of TouchEvent's fields (see
+#       the TouchEvent message below), emitted as a shared struct
+#       (TouchEventItem in C#, TouchEventItem in Kotlin). Used by TOUCH_BATCH.
+
+meta:
+  schema_version: 0
+  byte_order: little_endian
+  control_framing: "u8 type + u16 payloadLength + payload"
+  namespace_csharp: "DisplayBridge.Core.Protocol.Generated"
+  package_kotlin: "com.displaybridge.protocol.generated"
+
+# MessageType enum (control socket). Values are the wire type byte.
+message_types:
+  CAPS: 0x01            # tablet -> PC, handshake step 1
+  CONFIG: 0x02           # PC -> tablet, handshake step 2
+  SETTING_REQUEST: 0x10  # tablet -> PC
+  CONFIG_UPDATE: 0x11    # PC -> tablet
+  MODE_CHANGE: 0x12      # PC -> tablet
+  MODE_ACK: 0x13         # tablet -> PC
+  STATS: 0x14            # tablet -> PC
+  TOUCH_EVENT: 0x15      # tablet -> PC, single pointer sample (M3)
+  TOUCH_BATCH: 0x16      # tablet -> PC, batched pointer samples per vsync (M3)
+
+messages:
+  # --- Handshake (runs once, before the CONFIG_UPDATE/STATS loop) ---
+
+  - name: Caps
+    type: CAPS
+    direction: tablet_to_pc
+    doc: >
+      Tablet announces its display + decode capabilities right after the
+      control socket connects. First message of the handshake.
+    fields:
+      - { name: width, type: u16, doc: "panel width in px, e.g. 3000" }
+      - { name: height, type: u16, doc: "panel height in px, e.g. 1920" }
+      - { name: dpi, type: u16, doc: "panel density, e.g. 400" }
+      - { name: supportedHz, type: list, item_type: u8, doc: "e.g. [60,90,120,144]" }
+      - { name: supportedCodecs, type: list, item_type: u8, doc: "CodecId values, see enum" }
+      - { name: maxTouchPoints, type: u8 }
+
+  - name: Config
+    type: CONFIG
+    direction: pc_to_tablet
+    doc: >
+      PC replies to CAPS with the chosen streaming configuration. Tablet
+      must set up its decoder to match before ack-ing via MODE_ACK.
+    fields:
+      - { name: codec, type: u8, doc: "CodecId: 0=H264, 1=HEVC" }
+      - { name: width, type: u16 }
+      - { name: height, type: u16 }
+      - { name: hz, type: u8 }
+      - { name: bitrateKbps, type: u32 }
+
+  # --- Steady-state loop ---
+
+  - name: SettingRequest
+    type: SETTING_REQUEST
+    direction: tablet_to_pc
+    doc: "Tablet asks PC to change one setting (e.g. floating button tap)."
+    fields:
+      - { name: key, type: u8, doc: "SettingKey enum id" }
+      - { name: value, type: varint }
+
+  - name: ConfigUpdate
+    type: CONFIG_UPDATE
+    direction: pc_to_tablet
+    doc: "PC pushes one or more live-apply settings (⚡, no decoder flush)."
+    fields:
+      - { name: settings, type: list, item_type: keyvalue }
+
+  - name: ModeChange
+    type: MODE_CHANGE
+    direction: pc_to_tablet
+    doc: "PC forces a re-mode (⟳): tablet must flush decoder, await new IDR."
+    fields:
+      - { name: width, type: u16 }
+      - { name: height, type: u16 }
+      - { name: hz, type: u8 }
+      - { name: codec, type: u8 }
+      - { name: csd, type: bytes, doc: "codec-specific data (SPS/PPS or VPS/SPS/PPS)" }
+
+  - name: ModeAck
+    type: MODE_ACK
+    direction: tablet_to_pc
+    doc: "Tablet confirms decoder is ready to receive the new stream."
+    fields:
+      - { name: status, type: u8, doc: "0=ok, 1=unsupported, 2=decoderError" }
+
+  - name: Stats
+    type: STATS
+    direction: tablet_to_pc
+    doc: "1Hz telemetry feed; drives ABR + PC-side HUD."
+    fields:
+      - { name: fps, type: u8 }
+      - { name: decodeMs, type: u16 }
+      - { name: queueDepth, type: u8 }
+      - { name: dropped, type: u32 }
+
+  # --- Input (M3, Hybrid Cursor/Touch — see RESEARCH-v1-windows-touch-gesture-mechanism.md) ---
+
+  - name: TouchEvent
+    type: TOUCH_EVENT
+    direction: tablet_to_pc
+    doc: >
+      Single pointer sample from the tablet digitizer. PC-side
+      InputModeClassifier decides Cursor vs Touch injection routing based on
+      how many pointers are concurrently active + edge-zone position — the
+      tablet does not send a "mode" field (PC-authoritative, PLAN-v2 §3).
+    fields:
+      - { name: pointerId, type: u8, doc: "stable id per MotionEvent pointer, from getPointerId(i)" }
+      - { name: action, type: u8, doc: "0=DOWN, 1=MOVE, 2=UP, 3=CANCEL" }
+      - { name: x, type: u16, doc: "normalized 0-65535, left..right of tablet panel" }
+      - { name: y, type: u16, doc: "normalized 0-65535, top..bottom of tablet panel" }
+      - { name: pressure, type: u16, doc: "normalized 0-65535, from getPressure(i); 0 if unsupported" }
+      - { name: toolType, type: u8, doc: "0=FINGER, 1=STYLUS" }
+      - { name: timestampUs, type: u64, doc: "capture timestamp, microseconds (monotonic on tablet)" }
+
+  - name: TouchBatch
+    type: TOUCH_BATCH
+    direction: tablet_to_pc
+    doc: >
+      Batches multiple TouchEvent samples gathered within one vsync frame
+      (Android MotionEvent.getHistorySize() can yield several samples per
+      dispatch) into a single control-socket send, to cut per-sample
+      framing/syscall overhead under high-frequency digitizers.
+    fields:
+      - { name: events, type: list, item_type: touch_event, doc: "ordered oldest -> newest" }
+
+# Video socket frame header. Not type-prefixed like control messages —
+# every frame on :29500 has this exact layout, payload immediately follows
+# the fixed 13-byte header.
+video_frame:
+  name: VideoFrameHeader
+  doc: "[u32 len][u8 flags][u64 ptsUs][payload bytes], little-endian."
+  fields:
+    - { name: len, type: u32, doc: "byte length of payload that follows" }
+    - { name: flags, type: u8, doc: "bit0=keyframe/IDR, bit1=JPEG raw frame (session 4 no-native-encoder fallback, see FrameFlags.Jpeg in NativeCaptureEncoder.cs -- payload is a standalone JPEG image, not an H.264/HEVC NAL unit; receiver must bypass MediaCodec), bits2-7=reserved" }
+    - { name: ptsUs, type: u64, doc: "presentation timestamp, microseconds" }
+  payload_field: payload

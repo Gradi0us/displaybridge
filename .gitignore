@@ -1,0 +1,42 @@
+# .NET (pc-host)
+bin/
+obj/
+*.user
+*.suo
+
+# C++ native build (DisplayBridge.Native)
+x64/
+Debug/
+Release/
+*.ilk
+*.pdb
+*.exp
+*.lib
+
+# Gradle / Android (android-client)
+.gradle/
+build/
+*.iml
+.idea/
+local.properties
+captures/
+.cxx/
+
+# Windows / OS
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# NativeSmokeTest scratch output
+pc-host/tools/NativeSmokeTest/bin/
+pc-host/tools/NativeSmokeTest/obj/
+
+# Vendor VDD control tool binaries -- not our code, and VDD Control.exe
+# (171MB) exceeds GitHub's 100MB per-file push limit. The signed
+# driver files DriverManager.cs actually installs (SignedDrivers/*,
+# Resources/VirtualDisplayDriver/*) stay tracked.
+windows-driver/vdd-control/VDD Control.exe
+windows-driver/vdd-control/VDD.Control.zip
+

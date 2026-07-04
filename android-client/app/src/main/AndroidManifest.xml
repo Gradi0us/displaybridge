@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.displaybridge.probe">
+
+    <!-- M1.2: video pipeline needs local TCP loopback (adb forward) access.
+         INTERNET is required even for 127.0.0.1 sockets on API 26+. No
+         other M0.3/M0.4 code needed this permission before. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- M1.2 foreground service (VideoStreamService) keeps decode alive
+         when the tablet screen is off/locked (see CONTEXT-BRIEF §5 HONOR
+         MagicOS background-kill note). Uses mediaPlayback type, see below. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- mediaPlayback, not connectedDevice and not dataSync.
+         connectedDevice threw SecurityException on-device without a
+         USB/BT/CompanionDeviceManager permission we don't hold.
+         dataSync was tried next and works, but on targetSdk 36 (Android
+         15+/16 restrictions active on this device) dataSync is deprecated
+         and subject to a ~6h rolling runtime cap; the OS force-stops the
+         FGS after the budget, which would break an indefinite display
+         mirror (and the M4.5 "2h screen-off, service alive" soak DoD as
+         sessions lengthen).
+         mediaPlayback is the semantically-correct type for continuous
+         video playback in the background, has no time cap, and needs no
+         extra runtime permission. A display mirror IS continuous video
+         playback. See VideoStreamService.onCreate() comment. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:allowBackup="false"
+        android:label="DisplayBridge Codec Probe"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:debuggable="true">
+
+        <!--
+            M0.3 codec-probe activity. Diagnostic-only tool (dumps
+            MediaCodec PerformancePoints to Logcat), NOT a user-facing app.
+            Deliberately has NO LAUNCHER intent-filter so it doesn't show a
+            second confusing "DisplayBridge Codec Probe" icon on the tablet's
+            home screen alongside the real app (user-reported 2026-07-04:
+            "build ra 2 cai, 1 cai chi la du lieu test"). Still reachable for
+            manual diagnostics via:
+              adb shell am start -n com.displaybridge.probe/.CodecProbeActivity
+        -->
+        <activity
+            android:name="com.displaybridge.probe.CodecProbeActivity"
+            android:exported="true" />
+
+        <!--
+            M1.2 video decoder Activity (com.displaybridge.video package).
+            Exported+launchable independently so it can be started directly
+            via `adb shell am start` for manual testing without a full
+            handshake/launcher flow (M1.3 will wire this into the real
+            CAPS/CONFIG handshake entry point).
+        -->
+        <activity
+            android:name="com.displaybridge.video.VideoDecoderActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:screenOrientation="landscape"
+            android:resizeableActivity="false"
+            android:supportsPictureInPicture="false">
+            <!--
+                Session 17 bug fix: OEM launcher gesture (Honor "App
+                Multiplier" floating window) put this Activity into a
+                freeform window sized ~1519x1517 instead of the full
+                3000x1920 physical display, confirmed via `adb shell
+                dumpsys activity activities` showing Task mBounds=Rect(613,
+                253 - 2132, 1770) (2132-613=1519, 1770-253=1517), matching
+                the wrong CAPS the PC received exactly. sendCaps() reads
+                context.resources.displayMetrics, which reflects the
+                ACTIVITY WINDOW size, not the physical display, once in
+                freeform; there is no code-level fix for that once freeform
+                is entered, since a freeform window genuinely IS that size.
+                resizeableActivity=false stops Android/OEM launchers from
+                offering or auto-entering freeform/split-screen/App-Multiplier
+                for this Activity at all, which is correct here: this app's
+                whole purpose (streaming the tablet as a full-size PC
+                display) is meaningless at any size other than fullscreen.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name="com.displaybridge.video.VideoStreamService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+    </application>
+</manifest>

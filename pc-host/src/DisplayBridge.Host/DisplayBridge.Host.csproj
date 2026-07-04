@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>DisplayBridge.Host</AssemblyName>
+    <RootNamespace>DisplayBridge.Host</RootNamespace>
+    <!-- DisplayBridge.Native.dll is x64-only (DirectX/Media Foundation):
+         force x64 so the P/Invoke bitness always matches (session 6: native
+         DLL builds for real now, AnyCPU would risk a BadImageFormatException
+         on a 32-bit JIT path). -->
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Icon packaging task: DisplayBridge logo shown on the .exe file and
+         taskbar (Resources/logo.ico, multi-size 16/32/48/256). -->
+    <ApplicationIcon>Resources\logo.ico</ApplicationIcon>
+    <!-- Driver self-management task: request Administrator once at launch
+         (single UAC prompt) so DriverManager can install/restart the
+         virtual display driver without the user manually elevating or
+         using Device Manager. See app.manifest for details. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DisplayBridge.Core\DisplayBridge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy logo.ico/logo.png next to the built exe so App.xaml.cs can load
+         the tray icon at runtime from AppContext.BaseDirectory/Resources. -->
+    <None Include="Resources\logo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Resources\logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Driver self-management task: bundle the signed VDD by MTT driver
+         package (MttVDD.inf/.dll/mttvdd.cat, SignPath Foundation-signed) and
+         devcon.exe (Microsoft device-console sample tool) so DriverManager
+         (DisplayBridge.Core/Video/DriverManager.cs) can install/restart the
+         virtual display driver without any separate "Virtual Driver
+         Control.exe" tool. Only the x86 driver variant is bundled (matches
+         the copy already vetted/installed on the dev machine; devcon.exe
+         itself is a 32-bit tool that works against any architecture). -->
+    <None Include="Resources\VirtualDisplayDriver\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Resources\devcon.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Auto-copy the native capture/encode DLL next to the Host output so
+         NativeCaptureEncoder's [DllImport("DisplayBridge.Native.dll")] can
+         find it without a manual copy step (session 6). -->
+    <None Include="..\DisplayBridge.Native\x64\Debug\DisplayBridge.Native.dll" Condition="'$(Configuration)'=='Debug'">
+      <Link>DisplayBridge.Native.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Exists() guard added by icon/packaging task (session: build packaging):
+         Release native DLL may not exist yet while the H.264/native agent is
+         still mid-flight on the Release config. Without this guard, `dotnet
+         publish -c Release` hard-fails with MSB3030 even though the app can
+         run fine via GDI/JPEG fallback (StreamingCoordinator already handles
+         a missing native DLL at runtime). Debug branch above is untouched. -->
+    <None Include="..\DisplayBridge.Native\x64\Release\DisplayBridge.Native.dll" Condition="'$(Configuration)'=='Release' AND Exists('..\DisplayBridge.Native\x64\Release\DisplayBridge.Native.dll')">
+      <Link>DisplayBridge.Native.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

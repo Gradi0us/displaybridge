@@ -1,0 +1,165 @@
+--------- beginning of (HKS)5468FA37845BADE7ADE257AD72BC9C206551419BB12828709F22A0D4E84B96E53A4B7887D5DCFD21F665249B6BBEC1FD322B1A66A9E3FE71F495AB3E39149907A6714F6EE515388686698852635CFE48AB7F1431834A3F810EA488C5A3F7E90AA7D6EEDA3870FD8170AC944539FE7CDF3BF5CAD6769056938F7C8006B09329DC24965E625143B9B53F06C6F5D9998100800B332D13E476FF0D6B657508EDCD07EB340B7E0C68CA76EAFA8F9259FB78E9CA788D22CF5E66C1B807F74AC42FD33B6FEB0C4E193C69268396EC7E3B02B25ED1AEE4A92D8FD24E5F8883E4B451479156E4E433218FB60181B1B55E9C1F327E8BF722B106D23A213B61CCE8009C64BE(HKE)
+--------- beginning of main
+07-03 08:46:43.725 27163 27163 I CodecProbe: === DisplayBridge CodecProbe (M0.3) ===
+07-03 08:46:43.725 27163 27163 I CodecProbe: Device: HONOR ROD2-W09 | Android 16 (SDK 36)
+07-03 08:46:43.725 27163 27163 I CodecProbe: Target gate: HEVC decoder must cover 3000x1920@120 (P-High) and @144 (P-Ultra)
+07-03 08:46:43.725 27163 27163 I CodecProbe: 
+07-03 08:46:43.776 27163 27163 I CodecProbe: --- Decoder: c2.qti.avc.decoder | type=video/avc ---
+07-03 08:46:43.776 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2160@120)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 183.82978723404256]
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Bitrate range: [1, 160000000]
+07-03 08:46:43.776 27163 27163 I CodecProbe: 
+07-03 08:46:43.776 27163 27163 I CodecProbe: --- Decoder: OMX.qcom.video.decoder.avc | type=video/avc ---
+07-03 08:46:43.776 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2160@120)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.776 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 183.82978723404256]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Bitrate range: [1, 160000000]
+07-03 08:46:43.777 27163 27163 I CodecProbe: 
+07-03 08:46:43.777 27163 27163 I CodecProbe: --- Decoder: c2.qti.avc.decoder.low_latency | type=video/avc ---
+07-03 08:46:43.777 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: true
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2160@120)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 183.82978723404256]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Bitrate range: [1, 70000000]
+07-03 08:46:43.777 27163 27163 I CodecProbe: 
+07-03 08:46:43.777 27163 27163 I CodecProbe: --- Decoder: OMX.qcom.video.decoder.avc.low_latency | type=video/avc ---
+07-03 08:46:43.777 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: true
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2160@120)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 183.82978723404256]
+07-03 08:46:43.777 27163 27163 I CodecProbe:   Bitrate range: [1, 70000000]
+07-03 08:46:43.777 27163 27163 I CodecProbe: 
+07-03 08:46:43.777 27163 27163 I CodecProbe: --- Decoder: c2.qti.hevc.decoder | type=video/hevc ---
+07-03 08:46:43.777 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2176@120)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.777 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 185.19148936170214]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Bitrate range: [1, 160000000]
+07-03 08:46:43.778 27163 27163 I CodecProbe: 
+07-03 08:46:43.778 27163 27163 I CodecProbe: --- Decoder: OMX.qcom.video.decoder.hevc | type=video/hevc ---
+07-03 08:46:43.778 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2176@120)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 185.19148936170214]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Bitrate range: [1, 160000000]
+07-03 08:46:43.778 27163 27163 I CodecProbe: 
+07-03 08:46:43.778 27163 27163 I CodecProbe: --- Decoder: c2.qti.hevc.decoder.low_latency | type=video/hevc ---
+07-03 08:46:43.778 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: true
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2176@120)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 185.19148936170214]
+07-03 08:46:43.778 27163 27163 I CodecProbe:   Bitrate range: [1, 70000000]
+07-03 08:46:43.778 27163 27163 I CodecProbe: 
+07-03 08:46:43.778 27163 27163 I CodecProbe: --- Decoder: OMX.qcom.video.decoder.hevc.low_latency | type=video/hevc ---
+07-03 08:46:43.779 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: true
+07-03 08:46:43.779 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(7680x4320@30)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(4096x2176@120)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(3840x2160@120)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1920x1088@240)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   PerformancePoint: PerformancePoint(1280x720@480)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): true
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported widths: [96, 7680]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported heights: [96, 7680]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.0, 185.19148936170214]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Bitrate range: [1, 70000000]
+07-03 08:46:43.779 27163 27163 I CodecProbe: 
+07-03 08:46:43.779 27163 27163 I CodecProbe: --- Decoder: c2.android.avc.decoder | type=video/avc ---
+07-03 08:46:43.779 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   getSupportedPerformancePoints() returned null/empty (device did not declare PerformancePoints for this decoder)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported widths: [2, 4080]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported heights: [2, 4080]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [4.4326241134751776E-5, 87.14893617021276]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Bitrate range: [1, 48000000]
+07-03 08:46:43.779 27163 27163 I CodecProbe: 
+07-03 08:46:43.779 27163 27163 I CodecProbe: --- Decoder: OMX.google.h264.decoder | type=video/avc ---
+07-03 08:46:43.779 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   getSupportedPerformancePoints() returned null/empty (device did not declare PerformancePoints for this decoder)
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported widths: [2, 4080]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported heights: [2, 4080]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [4.4326241134751776E-5, 87.14893617021276]
+07-03 08:46:43.779 27163 27163 I CodecProbe:   Bitrate range: [1, 48000000]
+07-03 08:46:43.779 27163 27163 I CodecProbe: 
+07-03 08:46:43.780 27163 27163 I CodecProbe: --- Decoder: c2.android.hevc.decoder | type=video/hevc ---
+07-03 08:46:43.780 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.780 27163 27163 I CodecProbe:   getSupportedPerformancePoints() returned null/empty (device did not declare PerformancePoints for this decoder)
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): false
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Supported widths: [2, 4096]
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Supported heights: [2, 4096]
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.1111111111111112E-5, 22.22222222222222]
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Bitrate range: [1, 10000000]
+07-03 08:46:43.780 27163 27163 I CodecProbe: 
+07-03 08:46:43.780 27163 27163 I CodecProbe: --- Decoder: OMX.google.hevc.decoder | type=video/hevc ---
+07-03 08:46:43.780 27163 27163 I CodecProbe:   FEATURE_LowLatency supported: false
+07-03 08:46:43.780 27163 27163 I CodecProbe:   getSupportedPerformancePoints() returned null/empty (device did not declare PerformancePoints for this decoder)
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Covers 3000x1920@120 (P-High): false
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Covers 3000x1920@144 (P-Ultra): false
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Supported widths: [2, 4096]
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Supported heights: [2, 4096]
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Supported frame rates for 3000x1920: [1.1111111111111112E-5, 22.22222222222222]
+07-03 08:46:43.780 27163 27163 I CodecProbe:   Bitrate range: [1, 10000000]
+07-03 08:46:43.780 27163 27163 I CodecProbe: 
+07-03 08:46:43.780 27163 27163 I CodecProbe: === GO/NO-GO SUMMARY ===
+07-03 08:46:43.780 27163 27163 I CodecProbe: HEVC covers P-High  (3000x1920@120): GO
+07-03 08:46:43.780 27163 27163 I CodecProbe: HEVC covers P-Ultra (3000x1920@144): NO-GO
+07-03 08:46:43.780 27163 27163 I CodecProbe: AVC  covers P-High  (3000x1920@120): GO
+07-03 08:46:43.780 27163 27163 I CodecProbe: AVC  covers P-Ultra (3000x1920@144): NO-GO
+07-03 08:46:43.780 27163 27163 I CodecProbe: ========================
+07-03 08:46:43.780 27163 27163 I CodecProbe: PROBE_COMPLETE
