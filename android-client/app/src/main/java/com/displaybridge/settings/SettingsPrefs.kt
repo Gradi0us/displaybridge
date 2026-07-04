@@ -16,6 +16,7 @@ object SettingsPrefs {
     private const val PREFS_NAME = "displaybridge_mobile_settings"
     private const val KEY_FPS_CAP = "fps_cap"
     private const val KEY_ENCODE_PREF = "encode_pref"
+    private const val KEY_STATS_OVERLAY = "stats_overlay"
 
     /** No user preference set yet -- sendCaps() sends the device's full supportedHz list unfiltered. */
     const val FPS_CAP_UNSET = -1
@@ -52,6 +53,21 @@ object SettingsPrefs {
 
     fun setEncodePref(context: Context, codecId: Int) {
         prefs(context).edit().putInt(KEY_ENCODE_PREF, codecId).commit()
+    }
+
+    /**
+     * Session 18 (user request: "show chỉ số ... có thể bật tắt ở setting"):
+     * whether the top-left stats HUD (FPS + bandwidth + codec) is visible.
+     * Default true = keep the pre-existing always-on FPS overlay behavior.
+     * Read once per second from the overlay updater (SharedPreferences is
+     * an in-memory cache after first load, so this is effectively free) --
+     * that makes the toggle live without needing the dialog's app-restart.
+     */
+    fun getStatsOverlay(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_STATS_OVERLAY, true)
+
+    fun setStatsOverlay(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_STATS_OVERLAY, enabled).commit()
     }
 
     private fun prefs(context: Context) =

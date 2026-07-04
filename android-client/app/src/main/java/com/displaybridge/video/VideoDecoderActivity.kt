@@ -631,6 +631,15 @@ class VideoDecoderActivity : Activity(), SurfaceHolder.Callback, VideoStreamList
     private var fpsWindowStartMs = 0L
     private var fpsWindowCount = 0
 
+    // Session 18 (user request: "trên log fps bổ sung thêm 1 dòng bandwidth"):
+    // payload bytes received in the current 1s window -- measured at the same
+    // point as the fps counter so both numbers describe the same window.
+    // This is VIDEO PAYLOAD throughput (what actually crossed the adb-reverse
+    // tunnel for frames), not raw USB bus utilization -- close enough to spot
+    // "USB 2.0 cable saturated" (~220 Mbps ceiling measured session 18)
+    // vs "encoder starved" at a glance.
+    private var fpsWindowBytes = 0L
+
     /**
      * Called once per incoming frame (both H.264 and JPEG branches) from
      * onFrame(), before any codec-specific handling. Does three things:
@@ -652,21 +661,35 @@ class VideoDecoderActivity : Activity(), SurfaceHolder.Callback, VideoStreamList
         }
 
         fpsWindowCount++
+        fpsWindowBytes += frame.payload.size
         val now = System.currentTimeMillis()
         if (fpsWindowStartMs == 0L) fpsWindowStartMs = now
         val elapsedMs = now - fpsWindowStartMs
         if (elapsedMs >= 1000) {
             val fps = fpsWindowCount * 1000.0 / elapsedMs
+            // Session 18: bandwidth over the same window, in Mbps (bits, like
+            // network specs -- USB 2.0 ADB ceiling measured at ~220 Mbps on
+            // this setup, so the user can see saturation directly).
+            val mbps = fpsWindowBytes * 8.0 / 1000.0 / elapsedMs
             Log.i(TAG, "Video: $framesRenderedTotal frames total, ${"%.1f".format(fps)} fps (last frame ${frame.payload.size} bytes, isJpeg=${frame.isJpeg})")
+            Log.i(TAG, "Bandwidth: ${"%.1f".format(mbps)} Mbps (${fpsWindowBytes / 1024} KiB in ${elapsedMs}ms)")
 
             // Session 12: reflect the ACTUAL negotiated codec instead of a
             // hardcoded "H.264" label, now that HEVC is a real possibility.
             val modeLabel = if (frame.isJpeg) "JPEG fallback" else (if (mimeType == MIME_TYPE_HEVC) "HEVC" else "H.264")
-            val overlayText = "FPS: ${"%.1f".format(fps)}\n$modeLabel"
-            runOnUiThread { fpsOverlayText.text = overlayText }
+            val overlayText = "FPS: ${"%.1f".format(fps)}\nBW: ${"%.1f".format(mbps)} Mbps\n$modeLabel"
+            // Session 18: HUD visibility is a live user preference (Settings
+            // dialog "Chỉ số"): read once per window (1/s, in-memory cache
+            // after first load) so toggling applies without an app restart.
+            val showHud = com.displaybridge.settings.SettingsPrefs.getStatsOverlay(this)
+            runOnUiThread {
+                fpsOverlayText.visibility = if (showHud) View.VISIBLE else View.GONE
+                if (showHud) fpsOverlayText.text = overlayText
+            }
 
             fpsWindowStartMs = now
             fpsWindowCount = 0
+            fpsWindowBytes = 0
         }
     }
 

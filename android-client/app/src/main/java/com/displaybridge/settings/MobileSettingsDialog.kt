@@ -36,6 +36,7 @@ class MobileSettingsDialog(private val activity: Activity) : Dialog(activity) {
 
     private lateinit var fpsGroup: RadioGroup
     private lateinit var encodeGroup: RadioGroup
+    private lateinit var statsOverlayCheck: android.widget.CheckBox
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +59,19 @@ class MobileSettingsDialog(private val activity: Activity) : Dialog(activity) {
         root.addView(sectionLabel("Encode"))
         encodeGroup = buildEncodeGroup()
         root.addView(encodeGroup)
+
+        // Session 18 (user request: "show chỉ số ... có thể bật tắt ở
+        // setting"): live HUD toggle -- FPS + bandwidth + codec, top-left.
+        // A CheckBox, not a RadioGroup: it's a single boolean, and the HUD
+        // updater reads the pref every second so this applies live (the
+        // app-restart on Apply is only needed by the FPS/Encode prefs above,
+        // which feed the CAPS handshake).
+        root.addView(sectionLabel("Chỉ số (FPS / Bandwidth)"))
+        statsOverlayCheck = android.widget.CheckBox(activity).apply {
+            text = "Hiện HUD góc màn hình"
+            isChecked = SettingsPrefs.getStatsOverlay(activity)
+        }
+        root.addView(statsOverlayCheck)
 
         root.addView(buildButtonRow())
         return root
@@ -141,6 +155,7 @@ class MobileSettingsDialog(private val activity: Activity) : Dialog(activity) {
         val encodePref = selectedTag(encodeGroup, SettingsPrefs.ENCODE_PREF_AUTO)
         SettingsPrefs.setFpsCap(activity, fpsCap)
         SettingsPrefs.setEncodePref(activity, encodePref)
+        SettingsPrefs.setStatsOverlay(activity, statsOverlayCheck.isChecked)
 
         // Session 16: read BACK from disk and show it, so a silent
         // save-vs-selection mismatch (like the horizontal-clip bug above) is
