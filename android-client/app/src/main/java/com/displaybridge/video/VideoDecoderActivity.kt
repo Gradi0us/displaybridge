@@ -139,6 +139,24 @@ class VideoDecoderActivity : Activity(), SurfaceHolder.Callback, VideoStreamList
         super.onCreate(savedInstanceState)
         makeFullscreenImmersive()
 
+        // Session 19: while this activity is alive IT owns the control
+        // socket (its own ControlSocketClient reconnects every 1s), so the
+        // background watcher must not probe -- a probe connect would steal
+        // ControlSocketServer's single active-client slot mid-session. The
+        // flag is cleared in onDestroy, after which the watcher resumes
+        // waiting for the PC in the background.
+        com.displaybridge.presence.PcPresenceWatcherService.streamingActive = true
+        com.displaybridge.presence.PcPresenceWatcherService.start(this)
+
+        // POST_NOTIFICATIONS is a runtime permission on API 33+; both
+        // watcher notifications need it. Plain Activity.requestPermissions
+        // (no androidx dependency in this module -- see build.gradle.kts).
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100)
+        }
+
         // Wiring-E2E (session 3): overlay a transparent TouchCaptureView
         // (M3) on top of the mirroring SurfaceView (M1-Android) in the
         // same layout, per CONTEXT-BRIEF task brief "Việc 4". Video render
@@ -775,6 +793,9 @@ class VideoDecoderActivity : Activity(), SurfaceHolder.Callback, VideoStreamList
 
     override fun onDestroy() {
         stopEverything()
+        // Session 19: hand the control port back to the background watcher
+        // (see the matching flag-set in onCreate).
+        com.displaybridge.presence.PcPresenceWatcherService.streamingActive = false
         super.onDestroy()
     }
 }

@@ -146,6 +146,63 @@ public sealed class StreamingCoordinator : IDisposable
     private uint _activeFps;
     private uint _activeBitrateKbps;
 
+    // --- Session 19 (RCA-v2 §v2.1 addendum: mobile-first ordering wedge) ---
+
+    /// <summary>
+    /// RC-A fix: the display mode (width/height/fps/codec) last applied
+    /// SUCCESSFULLY end-to-end (driver at that resolution + pipeline
+    /// recreated). The Android app re-sends identical CAPS on EVERY
+    /// reconnect; before this fix each one triggered a full 4s devcon
+    /// driver restart + pipeline recreate (live log 19:57), and every
+    /// recreate is a fresh chance to hit the RC-B native-Init hang. Null
+    /// until the first successful apply.
+    /// </summary>
+    private (int Width, int Height, uint Fps, int Codec)? _appliedMode;
+
+    /// <summary>
+    /// True while VideoStreamServer is actually listening (set at the end
+    /// of Start()/RecreateFrameSourceForNewResolution, cleared when a
+    /// recreate begins tearing it down). Part of the RC-A skip condition:
+    /// only skip the re-apply when the pipeline built by the previous
+    /// apply is still alive.
+    /// </summary>
+    private volatile bool _videoPipelineUp;
+
+    /// <summary>
+    /// RC-C fix: serializes ApplyVirtualDisplayResolution / pipeline
+    /// recreation. OnCapsReceived runs synchronously on EACH control
+    /// client's read thread and ControlSocketServer accepts every new
+    /// connection, so a reconnecting client's CAPS can arrive while a
+    /// previous CAPS is still mid-apply (observed live: a second devcon
+    /// restart layered onto a wedged recreate). Monitor.TryEnter + drop
+    /// keeps it deadlock-free; a dropped client re-sends CAPS on its next
+    /// reconnect (Android retries every 1s), so nothing is lost.
+    /// </summary>
+    private readonly object _applyModeGate = new();
+
+    /// <summary>
+    /// RC-B fix: set once a native CreateFrameSource() has been abandoned
+    /// after hanging past CreateFrameSourceTimeout. Native capture state is
+    /// process-global (g_capture/g_encoder in CaptureEncodeExports.cpp) and
+    /// the hung thread is still inside it -- another native Init in this
+    /// process risks deadlocking on or corrupting that state, so once
+    /// abandoned every later recreate goes straight to the GDI/stub
+    /// fallback and the log tells the user to restart the Host app to get
+    /// native capture back. Static because the poisoned state is
+    /// per-process, not per-coordinator; tests never hit this (they inject
+    /// _frameSourceFactoryOverride, which bypasses the native path).
+    /// </summary>
+    private static bool s_nativeInitAbandoned;
+
+    /// <summary>
+    /// RC-B: how long a CreateFrameSource() (native DXGI/MFT init) may run
+    /// before being declared hung. Normal init is well under 3s even with
+    /// the 4x400ms DuplicateOutput retry; the observed failure mode is an
+    /// INFINITE hang right after a devcon driver restart, so anything past
+    /// this is treated as wedged, not slow.
+    /// </summary>
+    internal static readonly TimeSpan CreateFrameSourceTimeout = TimeSpan.FromSeconds(15);
+
     /// <summary>True once NativeCaptureEncoder.Init() actually succeeded (real video flowing). False = stub/test mode.</summary>
     public bool NativeCaptureAvailable { get; private set; }
 
@@ -211,11 +268,12 @@ public sealed class StreamingCoordinator : IDisposable
             : "VirtualDisplayConfigurator: KHONG the chuyen sang Extend topology (SetDisplayConfig that bai) -- 'VDD by MTT' co the van dang Clone/Duplicate voi man chinh.");
         _monitorLocator.Invalidate();
 
-        _frameSource = CreateFrameSource();
+        _frameSource = CreateFrameSourceGuarded();
 
         _videoServer = new VideoStreamServer(_frameSource, videoPort ?? _settings.Connection.VideoPort);
         _videoServer.FrameWritten += OnFrameWritten;
         _videoServer.Start();
+        _videoPipelineUp = true; // session 19 RC-A: pipeline alive marker
         Log?.Invoke($"VideoStreamServer listening on {_videoServer.BoundPort} (native={NativeCaptureAvailable})");
 
         _inputDispatcher = new InputDispatcher(_inputClassifier, _cursorInjector, _touchInjector);
@@ -532,14 +590,47 @@ public sealed class StreamingCoordinator : IDisposable
         _activeFps = (uint)ChooseHz(caps.SupportedHz);
         _activeBitrateKbps = (uint)EstimateBitrateKbps(caps.Width, caps.Height, (byte)_activeFps, _settings.Streaming.QualityPreset);
 
-        // RESEARCH-v2 fix: keep VDD by MTT's vdd_settings.xml in sync with
-        // the REAL connected device's native resolution -- no more preset
-        // picker, resolution is always 100% native per CAPS (2026-07-03
-        // decision). This does not affect the socket/CONFIG handshake below
-        // (that already used _deviceCaps.Resolve); it only makes Windows'
-        // virtual monitor itself report the right EDID mode so Windows
-        // Display Settings shows the correct native resolution too.
-        ApplyVirtualDisplayResolution(caps);
+        // Session 19 RC-A fix: the Android app re-sends CAPS on every
+        // reconnect. When the resolved mode is IDENTICAL to what's already
+        // applied and the pipeline is alive, restarting the driver +
+        // recreating the pipeline is pure harm (4s outage per reconnect,
+        // and each recreate risks the RC-B native-Init hang). Skip straight
+        // to the CONFIG reply.
+        var incomingMode = ((int)caps.Width, (int)caps.Height, _activeFps, _activeCodec);
+        if (_videoPipelineUp && _appliedMode.HasValue && _appliedMode.Value.Equals(incomingMode))
+        {
+            Log?.Invoke($"CAPS trung khop mode dang chay ({caps.Width}x{caps.Height}@{_activeFps}Hz codec={_activeCodec}) -- bo qua driver restart/recreate, chi gui CONFIG.");
+            var (w0, h0) = _deviceCaps.Resolve();
+            var cfg0 = new ConfigMessage((byte)_activeCodec, (ushort)w0, (ushort)h0, (byte)_activeFps, _activeBitrateKbps);
+            var sent0 = _controlServer?.Send(cfg0) ?? false;
+            Log?.Invoke($"CONFIG sent (ok={sent0}): codec={_activeCodec} {w0}x{h0}@{_activeFps}Hz {_activeBitrateKbps}kbps");
+            return;
+        }
+
+        // Session 19 RC-C fix: never let two apply/recreate flows run
+        // concurrently (reconnect CAPS arriving while a previous apply is
+        // still mid-flight). Drop-and-log is safe: the client re-sends CAPS
+        // on its next reconnect attempt.
+        if (!Monitor.TryEnter(_applyModeGate))
+        {
+            Log?.Invoke("CAPS den trong khi mot lan apply resolution khac dang chay -- BO QUA lan nay (client se gui lai CAPS o lan reconnect ke tiep).");
+            return;
+        }
+        try
+        {
+            // RESEARCH-v2 fix: keep VDD by MTT's vdd_settings.xml in sync with
+            // the REAL connected device's native resolution -- no more preset
+            // picker, resolution is always 100% native per CAPS (2026-07-03
+            // decision). This does not affect the socket/CONFIG handshake below
+            // (that already used _deviceCaps.Resolve); it only makes Windows'
+            // virtual monitor itself report the right EDID mode so Windows
+            // Display Settings shows the correct native resolution too.
+            ApplyVirtualDisplayResolution(caps);
+        }
+        finally
+        {
+            Monitor.Exit(_applyModeGate);
+        }
 
         var chosenHz = _activeFps; // set above, before ApplyVirtualDisplayResolution (session 14)
         var chosenCodec = _activeCodec; // set above, before ApplyVirtualDisplayResolution
@@ -580,6 +671,13 @@ public sealed class StreamingCoordinator : IDisposable
         {
             SendModeChangeBeforeVideoPipelineRecreate(caps);
             RecreateFrameSourceForNewResolution();
+            // Session 19 RC-A: record what is now applied so identical
+            // reconnect CAPS skip all of the above next time. Recorded even
+            // if the frame source fell back to GDI/stub (RC-B timeout) --
+            // the DRIVER is at this mode either way, and re-running the
+            // apply would not fix a poisoned native init (see
+            // s_nativeInitAbandoned).
+            _appliedMode = ((int)caps.Width, (int)caps.Height, _activeFps, _activeCodec);
         }
         else
         {
@@ -657,6 +755,7 @@ public sealed class StreamingCoordinator : IDisposable
         Log?.Invoke("Driver da restart -- dang tao lai frame source de bat dung resolution moi...");
         var port = _videoServer.BoundPort;
 
+        _videoPipelineUp = false; // session 19 RC-A: pipeline going down
         _videoServer.FrameWritten -= OnFrameWritten;
         _videoServer.Stop();
         (_frameSource as IDisposable)?.Dispose();
@@ -674,12 +773,103 @@ public sealed class StreamingCoordinator : IDisposable
             : "VirtualDisplayConfigurator: KHONG the xac nhan lai Extend topology sau restart.");
         _monitorLocator.Invalidate();
 
-        _frameSource = CreateFrameSource();
+        // Session 19 RC-B fix: CreateFrameSource() (native DXGI/MFT init)
+        // was observed HANGING FOREVER right here, right after a devcon
+        // driver restart -- leaving _videoServer stopped and port 29500
+        // dead for the rest of the process lifetime (the "mobile app
+        // cannot connect" wedge, live log 19:57). The guarded variant
+        // bounds the wait and falls back so the server below is ALWAYS
+        // recreated.
+        _frameSource = CreateFrameSourceGuarded();
 
         _videoServer = new VideoStreamServer(_frameSource, port);
         _videoServer.FrameWritten += OnFrameWritten;
         _videoServer.Start();
+        _videoPipelineUp = true;
         Log?.Invoke($"VideoStreamServer da tao lai, dang lang nghe tren {_videoServer.BoundPort} (native={NativeCaptureAvailable}).");
+    }
+
+    /// <summary>
+    /// Session 19 RC-B: runs CreateFrameSource() on a dedicated worker
+    /// thread and waits at most <see cref="CreateFrameSourceTimeout"/>.
+    /// On timeout the thread is ABANDONED (IsBackground=true so it can't
+    /// keep the process alive) rather than aborted: forcibly killing a
+    /// thread that's blocked inside native DXGI/MediaFoundation would risk
+    /// corrupting COM/driver state far worse than leaking one thread. The
+    /// process-wide s_nativeInitAbandoned flag then routes every future
+    /// recreate straight to the GDI/stub fallback -- the leaked thread is
+    /// still inside the process-global native state, so a second native
+    /// Init could deadlock on it. Restarting the Host app is the only
+    /// clean recovery for native capture after this, and the log says so.
+    /// </summary>
+    private IFrameSource CreateFrameSourceGuarded()
+    {
+        if (_frameSourceFactoryOverride != null)
+        {
+            // Test seam: factories are in-memory fakes, never hang.
+            return _frameSourceFactoryOverride();
+        }
+
+        if (Volatile.Read(ref s_nativeInitAbandoned))
+        {
+            Log?.Invoke("Native init da tung bi treo va bi bo roi trong process nay -- dung fallback GDI/stub ngay (khoi dong lai app Host de thu native capture lai).");
+            return CreateGdiFallbackOrStub();
+        }
+
+        IFrameSource? created = null;
+        Exception? failure = null;
+        using var done = new ManualResetEventSlim(false);
+        var worker = new Thread(() =>
+        {
+            try { created = CreateFrameSource(); }
+            catch (Exception ex) { failure = ex; }
+            finally { done.Set(); }
+        })
+        {
+            IsBackground = true,
+            Name = "DisplayBridge-FrameSourceInit",
+        };
+        worker.Start();
+
+        if (!done.Wait(CreateFrameSourceTimeout))
+        {
+            Volatile.Write(ref s_nativeInitAbandoned, true);
+            Log?.Invoke($"CANH BAO: CreateFrameSource() TREO qua {CreateFrameSourceTimeout.TotalSeconds:F0}s (native DXGI/MFT init khong tra ve sau driver restart) -- bo roi thread native, chuyen sang GDI/stub fallback de cong video song lai. Khoi dong lai app Host de khoi phuc native capture.");
+            return CreateGdiFallbackOrStub();
+        }
+
+        if (failure != null)
+        {
+            // CreateFrameSource() already has its own internal fallback
+            // chain; reaching here means even that threw unexpectedly.
+            Log?.Invoke($"CreateFrameSource() nem loi khong mong doi ({failure.GetType().Name}: {failure.Message}) -- dung fallback GDI/stub.");
+            return CreateGdiFallbackOrStub();
+        }
+
+        return created!;
+    }
+
+    /// <summary>
+    /// Shared RC-B fallback: GDI JPEG capture if the desktop allows it,
+    /// else the zero-frame stub -- both keep VideoStreamServer's port
+    /// alive, which is the whole point (a dead port is the wedge).
+    /// </summary>
+    private IFrameSource CreateGdiFallbackOrStub()
+    {
+        NativeCaptureAvailable = false;
+        NativeUsingGpuColorConversion = false;
+        var gdi = new GdiScreenCapture();
+        try
+        {
+            gdi.Init();
+            Log?.Invoke("GdiScreenCapture fallback active (~4fps JPEG) -- cong video van song, chat luong giam cho toi khi khoi dong lai Host.");
+            return gdi;
+        }
+        catch (Exception ex)
+        {
+            Log?.Invoke($"GdiScreenCapture cung khong chay duoc ({ex.GetType().Name}: {ex.Message}) -- dung stub 0-frame de giu cong video song.");
+            return new StubFrameSource();
+        }
     }
 
     private byte ChooseHz(IReadOnlyList<byte> supportedHz)
@@ -812,7 +1002,29 @@ public sealed class StreamingCoordinator : IDisposable
             {
                 _activeCodec = chosenCodec;
                 Thread.Sleep(300); // let Android's onModeChange()/decoder flush land before the video socket dies below
-                RecreateFrameSourceForNewResolution();
+                // Session 19 RC-C: same single-flight gate as OnCapsReceived --
+                // a codec change racing a CAPS-triggered apply must not run
+                // two recreates concurrently. Busy => skip; the user can
+                // re-apply from Settings once the in-flight apply finishes.
+                if (Monitor.TryEnter(_applyModeGate))
+                {
+                    try
+                    {
+                        RecreateFrameSourceForNewResolution();
+                        if (_appliedMode is { } m)
+                        {
+                            _appliedMode = (m.Width, m.Height, m.Fps, chosenCodec);
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_applyModeGate);
+                    }
+                }
+                else
+                {
+                    Log?.Invoke("Codec change den trong khi mot lan apply/recreate khac dang chay -- BO QUA (thu lai tu Settings sau vai giay).");
+                }
             }
         }
         // WindowsApi/Reconnect/Local: no protocol message by design (catalog §3.5).

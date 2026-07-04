@@ -24,6 +24,14 @@
          extra runtime permission. A display mirror IS continuous video
          playback. See VideoStreamService.onCreate() comment. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Session 19: PcPresenceWatcherService (background PC detector).
+         specialUse because no typed FGS category covers "poll a loopback
+         socket through adb reverse"; the subtype property on the service
+         declares intent for review tooling. POST_NOTIFICATIONS is needed
+         on API 33+ for both the ongoing watcher notification and the
+         high-priority "PC san sang, ket noi?" prompt. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"
@@ -82,5 +90,16 @@
             android:name="com.displaybridge.video.VideoStreamService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Session 19: background PC-presence watcher (see the permission
+             block comment above for the specialUse rationale). -->
+        <service
+            android:name="com.displaybridge.presence.PcPresenceWatcherService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="pc-presence-watch" />
+        </service>
     </application>
 </manifest>

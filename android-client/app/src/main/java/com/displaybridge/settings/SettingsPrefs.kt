@@ -17,6 +17,7 @@ object SettingsPrefs {
     private const val KEY_FPS_CAP = "fps_cap"
     private const val KEY_ENCODE_PREF = "encode_pref"
     private const val KEY_STATS_OVERLAY = "stats_overlay"
+    private const val KEY_PRESENCE_WATCHER = "presence_watcher"
 
     /** No user preference set yet -- sendCaps() sends the device's full supportedHz list unfiltered. */
     const val FPS_CAP_UNSET = -1
@@ -68,6 +69,19 @@ object SettingsPrefs {
 
     fun setStatsOverlay(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_STATS_OVERLAY, enabled).commit()
+    }
+
+    /**
+     * Session 19: whether PcPresenceWatcherService should probe for the PC
+     * in the background and post the "PC sẵn sàng — kết nối?" prompt.
+     * Default ON per the feature request; read once per 5s probe loop so
+     * toggling applies without restarting the service.
+     */
+    fun getPresenceWatcher(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_PRESENCE_WATCHER, true)
+
+    fun setPresenceWatcher(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_PRESENCE_WATCHER, enabled).commit()
     }
 
     private fun prefs(context: Context) =

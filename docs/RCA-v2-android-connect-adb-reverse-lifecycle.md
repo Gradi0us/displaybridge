@@ -74,3 +74,18 @@ adb server restart      →    Không có code nào re-apply   →   App Android
 
 ## Token Summary
 ~35k in (code reads + live probes) · ~3k out (doc). Context OK.
+
+---
+
+## v2.1 Addendum (session 19) — Mobile-first ordering wedge
+
+**Symptom**: bật mobile app TRƯỚC rồi mới bật PC Host → không thể kết nối; Host wedge.
+
+**Live evidence (2026-07-04)**: host log dừng vĩnh viễn tại `[19:57:33.870] "dang tao lai frame source..."` (8+ phút im lặng, process 36288 vẫn sống); tablet retry vô hạn "Connected → EOF"; control port vẫn accept CAPS mới → devcon restart chồng lần 2 (tablet nhận MODE_CHANGE 20:05:30 từ luồng chồng, không có log tương ứng).
+
+**Root causes**:
+- RC-A (P0): `ApplyVirtualDisplayResolution` gọi `EnsureReady` (devcon restart driver, ~4s) + `RecreateFrameSourceForNewResolution` cho MỌI CAPS — kể cả khi resolution/hz KHÔNG ĐỔI (log 19:57: cùng 3000x1920 vẫn restart). Mỗi app-reconnect = 1 driver restart → bão restart.
+- RC-B (P0): `RecreateFrameSourceForNewResolution` Stop() video server rồi mới CreateFrameSource(); native `Init()` (DuplicateOutput/MFT sau driver restart) có thể TREO vô hạn (retry chỉ bắt exception, không bắt hang) → video port chết vĩnh viễn.
+- RC-C (P1): `OnCapsReceived` chạy sync trên control-read thread, KHÔNG có guard chống reentrancy → 2 CAPS (client cũ kẹt + client mới) chạy chồng, devcon/native đụng nhau.
+
+**Fixes**: (1) skip EnsureReady+Recreate khi caps không đổi & pipeline sống — chỉ gửi CONFIG; (2) bọc CreateFrameSource trong worker-thread + timeout 15s, thất bại thì vẫn dựng lại VideoStreamServer (stub/GDI) để port sống; (3) lock/gate quanh apply-resolution, CAPS trùng đang xử lý thì bỏ qua.

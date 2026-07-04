@@ -47,6 +47,10 @@ public partial class SettingsWindow : Window
     // entirely (not just deprecated) so any future callsite that forgets to
     // pass real caps fails at COMPILE time instead of silently showing the
     // wrong resolution at runtime -- see RCA "Preventive Actions".
+    // Session 19: schtasks-backed "Khoi dong cung Windows" (see
+    // StartupTaskManager.cs header for why Task Scheduler, not a Run key).
+    private readonly IStartupTaskManager _startupTaskManager = new StartupTaskManager();
+
     internal SettingsWindow(SettingsStore store, DeviceCaps caps)
     {
         InitializeComponent();
@@ -56,6 +60,27 @@ public partial class SettingsWindow : Window
 
         PopulateComboBoxes();
         BindValuesFromSettings(_original);
+        AutoStartCheckBox.IsChecked = _startupTaskManager.IsEnabled();
+    }
+
+    /// <summary>
+    /// Applied immediately on toggle (not on Save): the scheduled task is
+    /// system state, not part of AppSettings/settings.json, so tying it to
+    /// the Save/Cancel flow would leave the checkbox lying whenever the
+    /// user cancels. Result (or failure detail) lands in the Status line.
+    /// </summary>
+    private void AutoStartCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        var wantEnabled = AutoStartCheckBox.IsChecked == true;
+        var (ok, detail) = wantEnabled ? _startupTaskManager.Enable() : _startupTaskManager.Disable();
+        StatusTextBlock.Text = ok
+            ? (wantEnabled ? "Đã bật khởi động cùng Windows." : "Đã tắt khởi động cùng Windows.")
+            : $"Lỗi auto-start: {detail}";
+        if (!ok)
+        {
+            // Reflect reality: the toggle failed, don't leave the box lying.
+            AutoStartCheckBox.IsChecked = _startupTaskManager.IsEnabled();
+        }
     }
 
     private void PopulateComboBoxes()

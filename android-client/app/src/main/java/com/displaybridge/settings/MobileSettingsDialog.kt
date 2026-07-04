@@ -37,6 +37,7 @@ class MobileSettingsDialog(private val activity: Activity) : Dialog(activity) {
     private lateinit var fpsGroup: RadioGroup
     private lateinit var encodeGroup: RadioGroup
     private lateinit var statsOverlayCheck: android.widget.CheckBox
+    private lateinit var presenceWatcherCheck: android.widget.CheckBox
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +73,15 @@ class MobileSettingsDialog(private val activity: Activity) : Dialog(activity) {
             isChecked = SettingsPrefs.getStatsOverlay(activity)
         }
         root.addView(statsOverlayCheck)
+
+        // Session 19: background PC-presence watcher toggle (see
+        // PcPresenceWatcherService) -- read each probe loop, applies live.
+        root.addView(sectionLabel("Chạy nền"))
+        presenceWatcherCheck = android.widget.CheckBox(activity).apply {
+            text = "Chờ PC ở chế độ nền (báo khi PC sẵn sàng)"
+            isChecked = SettingsPrefs.getPresenceWatcher(activity)
+        }
+        root.addView(presenceWatcherCheck)
 
         root.addView(buildButtonRow())
         return root
@@ -156,6 +166,7 @@ class MobileSettingsDialog(private val activity: Activity) : Dialog(activity) {
         SettingsPrefs.setFpsCap(activity, fpsCap)
         SettingsPrefs.setEncodePref(activity, encodePref)
         SettingsPrefs.setStatsOverlay(activity, statsOverlayCheck.isChecked)
+        SettingsPrefs.setPresenceWatcher(activity, presenceWatcherCheck.isChecked)
 
         // Session 16: read BACK from disk and show it, so a silent
         // save-vs-selection mismatch (like the horizontal-clip bug above) is
