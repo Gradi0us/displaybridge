@@ -80,6 +80,18 @@ public sealed class StreamingCoordinator : IDisposable
     private bool? _lastKnownAdbConnected;
     private int _adbPollInProgress;
 
+    // ADB reverse tunnel lifecycle task (session 18, RC1-FIX; see
+    // docs/RCA-v2-android-connect-adb-reverse-lifecycle.md): the Host never
+    // set up `adb reverse tcp:29500/29501` itself -- adb flushes ALL reverse
+    // rules on server restart / USB replug / device reboot, so the Android app
+    // (which dials 127.0.0.1:29500/29501 ON THE DEVICE) got ECONNREFUSED
+    // forever even while `adb devices` still showed the tablet. This manager
+    // re-applies any missing reverse mappings; it's called every poll tick
+    // while Connected (tunnels can vanish while the connection state itself
+    // stays Connected) AND once immediately in Start() so the user doesn't
+    // wait AdbPollFirstDelay for the first attempt. See OnAdbPollTick.
+    private readonly IAdbReverseManager _adbReverseManager;
+
     /// <summary>
     /// First check waits this long after Start() so a user who just opened
     /// the app and is still plugging in the USB cable for the first time
@@ -156,7 +168,7 @@ public sealed class StreamingCoordinator : IDisposable
     public event Action<string>? Log;
     public event Action? ClientConnected;
 
-    public StreamingCoordinator(SettingsStore? settingsStore = null, ICursorInjector? cursorInjector = null, ITouchInjector? touchInjector = null, IDriverManager? driverManager = null, Func<IFrameSource>? frameSourceFactory = null, IAdbDeviceChecker? adbChecker = null)
+    public StreamingCoordinator(SettingsStore? settingsStore = null, ICursorInjector? cursorInjector = null, ITouchInjector? touchInjector = null, IDriverManager? driverManager = null, Func<IFrameSource>? frameSourceFactory = null, IAdbDeviceChecker? adbChecker = null, IAdbReverseManager? adbReverseManager = null)
     {
         _settingsStore = settingsStore ?? new SettingsStore();
         _settings = _settingsStore.Load(_deviceCaps);
@@ -165,6 +177,7 @@ public sealed class StreamingCoordinator : IDisposable
         _driverManager = driverManager ?? new DriverManager(_vddConfigurator);
         _frameSourceFactoryOverride = frameSourceFactory;
         _adbChecker = adbChecker ?? new AdbDeviceChecker();
+        _adbReverseManager = adbReverseManager ?? new AdbReverseManager();
         // Seed from the user's forced preference (if any) so the very
         // first CreateFrameSource() in Start() -- before any CAPS has
         // arrived -- at least honors an explicit Force setting; Auto falls
@@ -218,6 +231,26 @@ public sealed class StreamingCoordinator : IDisposable
         _controlServer.Start();
         Log?.Invoke($"ControlSocketServer listening on {_controlServer.BoundPort}");
 
+        // ADB reverse tunnel task (session 18, RC1-FIX): both servers are now
+        // bound, so do ONE immediate attempt to (re)establish the adb reverse
+        // tunnels on a ThreadPool thread -- otherwise the first attempt would
+        // only happen at the first poll tick (AdbPollFirstDelay = 20s) and the
+        // user would sit on ECONNREFUSED for 20s after opening the Host.
+        // Fire-and-forget + swallow/log so Start() stays non-blocking and a
+        // slow/missing adb never stalls the caller; steady-state
+        // re-application then continues in OnAdbPollTick.
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                EnsureReverseTunnels();
+            }
+            catch (Exception ex)
+            {
+                Log?.Invoke($"ADB reverse (lan dau) gap loi khong mong muon: {ex.GetType().Name}: {ex.Message}");
+            }
+        });
+
         // No-ADB auto-disable task (session 15): background poll starts here,
         // AFTER both servers are up, with a long first delay (see
         // AdbPollFirstDelay) so a user still plugging in the tablet for the
@@ -240,6 +273,14 @@ public sealed class StreamingCoordinator : IDisposable
     /// Guarded against overlapping runs (Interlocked flag) in case a check
     /// somehow takes longer than the poll interval -- devcon/adb calls are
     /// already timeout-bounded, but this is a cheap extra safety net.
+    ///
+    /// Session 18 (RC1-FIX, adb reverse lifecycle): additionally re-applies
+    /// the adb reverse tunnels EVERY tick while Connected (not only on a
+    /// transition) via EnsureReverseTunnels -- adb silently flushes reverse
+    /// rules on server restart / USB replug while `adb devices` can still read
+    /// Connected, so a transition-only re-apply would never restore them. That
+    /// call is idempotent and stays quiet unless it actually applied/failed
+    /// something. The driver enable/disable below stays transition-only.
     /// </summary>
     internal void OnAdbPollTick(object? state)
     {
@@ -259,9 +300,25 @@ public sealed class StreamingCoordinator : IDisposable
             }
 
             var connected = connState == AdbConnectionState.Connected;
+
+            // Session 18 (RC1-FIX): re-apply adb reverse tunnels on EVERY tick
+            // while Connected, regardless of whether the connection state just
+            // transitioned -- the tunnels can vanish (adb server restart / USB
+            // replug) while the state stays Connected. Runs BEFORE the
+            // transition short-circuit below so it isn't skipped on steady
+            // Connected ticks. Idempotent + self-quieting (see
+            // EnsureReverseTunnels / AdbReverseManager.EnsureReverse).
+            if (connected)
+            {
+                EnsureReverseTunnels();
+            }
+
+            // Driver enable/disable stays TRANSITION-ONLY (the session-15
+            // debounce): only shell out to devcon when the connection state
+            // actually flipped, never every 7s.
             if (_lastKnownAdbConnected.HasValue && _lastKnownAdbConnected.Value == connected)
             {
-                return; // no real change since last check -- nothing to do
+                return; // no real change since last check -- nothing to do for the driver
             }
             _lastKnownAdbConnected = connected;
 
@@ -286,6 +343,39 @@ public sealed class StreamingCoordinator : IDisposable
         {
             System.Threading.Interlocked.Exchange(ref _adbPollInProgress, 0);
         }
+    }
+
+    /// <summary>
+    /// Re-applies the adb reverse tunnels for the currently bound video/control
+    /// ports (session 18, RC1-FIX). The Android app connects to
+    /// 127.0.0.1:&lt;port&gt; ON THE DEVICE, so each tunnel's device-side port
+    /// is the SAME well-known port number the app dials -- i.e. the port we're
+    /// bound to -- hence device and host port are identical per mapping (bound
+    /// port on both sides). Skips entirely if a server isn't bound yet
+    /// (BoundPort null/-1). Logs ONLY when the manager actually applied or
+    /// failed something: EnsureReverse returns an EMPTY Detail when all tunnels
+    /// are already present, and we deliberately don't log that so a steady
+    /// stream doesn't spam "already present" every AdbPollInterval (7s).
+    /// </summary>
+    private void EnsureReverseTunnels()
+    {
+        var videoPort = _videoServer?.BoundPort ?? -1;
+        var controlPort = _controlServer?.BoundPort ?? -1;
+
+        var mappings = new List<(int DevicePort, int HostPort)>();
+        if (videoPort > 0) mappings.Add((videoPort, videoPort));
+        if (controlPort > 0) mappings.Add((controlPort, controlPort));
+        if (mappings.Count == 0) return; // no server bound yet -- nothing to tunnel
+
+        var (ok, detail) = _adbReverseManager.EnsureReverse(mappings);
+        if (string.IsNullOrEmpty(detail))
+        {
+            return; // nothing changed (all tunnels already present) -- stay quiet
+        }
+
+        Log?.Invoke(ok
+            ? $"ADB reverse: {detail}"
+            : $"ADB reverse KHONG thiet lap duoc (app Android se bi ECONNREFUSED cho toi khi khac phuc): {detail}");
     }
 
     private IFrameSource CreateFrameSource()
