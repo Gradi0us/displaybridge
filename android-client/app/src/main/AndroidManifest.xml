@@ -57,26 +57,20 @@
             android:name="com.displaybridge.video.VideoDecoderActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:screenOrientation="landscape"
-            android:resizeableActivity="false"
-            android:supportsPictureInPicture="false">
+            android:screenOrientation="landscape">
             <!--
-                Session 17 bug fix: OEM launcher gesture (Honor "App
-                Multiplier" floating window) put this Activity into a
-                freeform window sized ~1519x1517 instead of the full
-                3000x1920 physical display, confirmed via `adb shell
-                dumpsys activity activities` showing Task mBounds=Rect(613,
-                253 - 2132, 1770) (2132-613=1519, 1770-253=1517), matching
-                the wrong CAPS the PC received exactly. sendCaps() reads
-                context.resources.displayMetrics, which reflects the
-                ACTIVITY WINDOW size, not the physical display, once in
-                freeform; there is no code-level fix for that once freeform
-                is entered, since a freeform window genuinely IS that size.
-                resizeableActivity=false stops Android/OEM launchers from
-                offering or auto-entering freeform/split-screen/App-Multiplier
-                for this Activity at all, which is correct here: this app's
-                whole purpose (streaming the tablet as a full-size PC
-                display) is meaningless at any size other than fullscreen.
+                Session 17 originally pinned this Activity fullscreen-only
+                (resizeableActivity=false, supportsPictureInPicture=false)
+                because Honor "App Multiplier" freeform windows made
+                sendCaps() report the WINDOW size (~1519x1517) instead of
+                the physical 3000x1920 panel, and the PC resized the
+                virtual display to match. Session 18 (user request: "khong
+                bat buoc full man hinh") removed that restriction; the
+                real fix moved into ControlSocketClient.sendCaps(), which
+                now reads Display.getRealMetrics() (physical panel size,
+                window-mode independent), so CAPS stays 3000x1920 whether
+                the app runs fullscreen, split-screen, or in a freeform
+                floating window.
             -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

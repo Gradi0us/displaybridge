@@ -214,9 +214,25 @@ class ControlSocketClient(
         val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
 
-        val metrics = context.resources.displayMetrics
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
+        // Session 18: read the PHYSICAL panel size via Display.getRealMetrics,
+        // NOT context.resources.displayMetrics. The resources metrics reflect
+        // the current WINDOW size, so with the activity in a freeform/floating
+        // window (Honor "App Multiplier") CAPS reported the window size (e.g.
+        // 1519x1517) and the PC resized the virtual display to match -- the
+        // session-17 workaround pinned the manifest to fullscreen-only
+        // (resizeableActivity=false) to dodge this, which the user has now
+        // asked to undo ("khong bat buoc full man hinh"). Real metrics are
+        // window-mode independent, so CAPS stays correct in any window mode
+        // and the manifest restriction could be lifted.
+        val metrics = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") // deprecated API 31+, still functional; simplest window-mode-independent source
+        display.getRealMetrics(metrics)
+        // Streaming/VDD is landscape (activity is landscape-locked): if the
+        // device happens to be held portrait when this runs, getRealMetrics
+        // returns the rotated (swapped) size -- normalize to landscape so the
+        // PC never configures a portrait virtual display.
+        val width = maxOf(metrics.widthPixels, metrics.heightPixels)
+        val height = minOf(metrics.widthPixels, metrics.heightPixels)
         val dpi = metrics.densityDpi
 
         val deviceSupportedHz: List<Int> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
