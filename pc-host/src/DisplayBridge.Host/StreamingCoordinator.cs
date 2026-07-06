@@ -696,6 +696,19 @@ public sealed class StreamingCoordinator : IDisposable
     /// </summary>
     private void ApplyVirtualDisplayResolution(CapsMessage caps)
     {
+        // Session 19 streaming-only-gate companion fix: with the driver now
+        // DISABLED by default whenever no session is active, the device node
+        // is almost always disabled at the moment the first CAPS arrives --
+        // and DriverManager.EnsureReady's devcon RESTART does not ENABLE a
+        // disabled node (live log 10:24: "RestartDevice -> Restarted" in
+        // 38ms, then capture still couldn't find the VDD and silently
+        // mirrored the PRIMARY screen). Explicitly enable BEFORE EnsureReady
+        // so the restart + the recreate's settle-wait operate on an enabled,
+        // desktop-attached device. Idempotent when already enabled.
+        var (enOk, enMsg) = _driverManager.EnableDevice();
+        _driverEnabledBelief = enOk ? true : _driverEnabledBelief;
+        Log?.Invoke($"Bat 'VDD by MTT' truoc khi ap resolution (ok={enOk}): {enMsg}");
+
         var supportedHzInt = caps.SupportedHz.Select(h => (int)h).ToList();
         // Verify RC2 fix: pass onStep so each [1/3]/[2/3]/[3/3] line lands in
         // %TEMP%\displaybridge-host.log the moment it happens, instead of
@@ -822,6 +835,24 @@ public sealed class StreamingCoordinator : IDisposable
         // bounds the wait and falls back so the server below is ALWAYS
         // recreated.
         _frameSource = CreateFrameSourceGuarded();
+
+        // Session 19 streaming-only-gate companion fix: when the VDD was
+        // just ENABLED from a disabled state (the normal case now -- see
+        // ApplyVirtualDisplayResolution), Windows can need more than the 3s
+        // sleep above to attach the desktop/EDID; the native capture then
+        // enumerates outputs too early, misses the VDD, and silently
+        // mirrors the PRIMARY screen for the whole session (live log
+        // 10:24). Detect that fallback and retry the enumeration a few
+        // times with extra settle time before accepting it.
+        for (var retry = 1; retry <= 3 && _frameSource is NativeCaptureEncoder { UsedFallbackPrimaryDisplay: true }; retry++)
+        {
+            Log?.Invoke($"Capture dang mirror man CHINH (VDD chua attach xong sau enable/restart?) -- doi 2.5s va thu enumerate lai ({retry}/3)...");
+            (_frameSource as IDisposable)?.Dispose();
+            Thread.Sleep(2500);
+            _vddConfigurator.EnsureExtendTopology();
+            _monitorLocator.Invalidate();
+            _frameSource = CreateFrameSourceGuarded();
+        }
 
         _videoServer = new VideoStreamServer(_frameSource, port);
         _videoServer.FrameWritten += OnFrameWritten;
