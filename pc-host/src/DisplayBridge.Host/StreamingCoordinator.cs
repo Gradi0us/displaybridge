@@ -409,23 +409,22 @@ public sealed class StreamingCoordinator : IDisposable
     /// last applied (<see cref="_driverEnabledBelief"/>) -- so it's safe to
     /// call every 7s poll tick without redundant devcon churn.
     ///
-    /// Desired ENABLED iff a tablet is genuinely present, confirmed by
-    /// EITHER of two independent signals:
-    ///   1. our own control socket currently holds a live client -- i.e. a
-    ///      streaming session is in progress RIGHT NOW (authoritative; this
-    ///      is what keeps the display from being yanked mid-stream even if
-    ///      `adb devices` momentarily returns Indeterminate on a flaky adb
-    ///      server), or
-    ///   2. `adb devices` reports a Connected authorized device.
-    /// Anything else -- Disconnected, or Indeterminate with no active
-    /// session -- means "no tablet", so the driver is DISABLED and Windows
-    /// stops showing a phantom second monitor. This directly satisfies the
-    /// user requirement: no app-window session => no virtual display.
+    /// Desired ENABLED iff a tablet is ACTIVELY STREAMING right now --
+    /// i.e. our control socket currently holds a live client. Merely having
+    /// an ADB device connected is NOT enough (user report 2026-07-06: "dang
+    /// co ket noi adb ... van bi man hinh ma" -- a plugged-in tablet with no
+    /// streaming session must not conjure a phantom monitor). The driver is
+    /// enabled as part of handling the tablet's first CAPS
+    /// (OnCapsReceived -> EnsureReady), so gating on the live control client
+    /// here can't deadlock the start of a real session, and it guarantees
+    /// the display exists ONLY while something is really using it.
+    /// Everything else -- ADB connected but idle, disconnected, or the Host
+    /// simply running with no tablet app -- disables it.
     /// </summary>
     private void ReconcileDriverState(AdbConnectionState connState)
     {
         var hasLiveSession = _controlServer?.HasClient == true;
-        var desiredEnabled = hasLiveSession || connState == AdbConnectionState.Connected;
+        var desiredEnabled = hasLiveSession;
 
         if (_driverEnabledBelief.HasValue && _driverEnabledBelief.Value == desiredEnabled)
         {
