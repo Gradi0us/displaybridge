@@ -139,6 +139,16 @@ class VideoDecoderActivity : Activity(), SurfaceHolder.Callback, VideoStreamList
         super.onCreate(savedInstanceState)
         makeFullscreenImmersive()
 
+        // Session 19: stop Android from reusing a SCREENSHOT of the last
+        // streamed frame as this task's recents thumbnail / starting window.
+        // Without this, closing the app on frame X and reopening flashes
+        // frame X (a system-drawn snapshot, before our own onCreate/surface
+        // even runs) -- exactly the "cache frame cuoi cua phien truoc" the
+        // user reported. API 33+; older devices just keep the default.
+        if (Build.VERSION.SDK_INT >= 33) {
+            setRecentsScreenshotEnabled(false)
+        }
+
         // Session 19: while this activity is alive IT owns the control
         // socket (its own ControlSocketClient reconnects every 1s), so the
         // background watcher must not probe -- a probe connect would steal
@@ -437,7 +447,43 @@ class VideoDecoderActivity : Activity(), SurfaceHolder.Callback, VideoStreamList
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceReady = true
+        // Session 19 (user report: app shows the LAST FRAME of the previous
+        // session before a fresh stream starts). A SurfaceView's buffer is
+        // retained by SurfaceFlinger across the activity being backgrounded/
+        // recreated, so the stale last-decoded frame can flash through until
+        // the first NEW frame renders. Wipe the freshly (re)created surface
+        // to black BEFORE the decoder attaches to it -- the decoder is
+        // created later in ensureDecoderStarted() (after the client connects
+        // and CONFIG arrives), so the surface is free to lockCanvas here --
+        // and re-arm the waiting overlay so only a genuinely new frame can
+        // reveal the video layer again.
+        clearSurfaceToBlack(holder)
+        hasReceivedFirstFrame = false
+        runOnUiThread {
+            waitingMessageText.text = TEXT_WAITING_FIRST_CONNECT
+            waitingOverlay.visibility = View.VISIBLE
+        }
         startClientIfReady()
+    }
+
+    /**
+     * Paints the SurfaceView's current buffer solid black. Best-effort: if
+     * the surface is already owned by MediaCodec (shouldn't happen at
+     * surfaceCreated time, but guard anyway) lockCanvas throws and the
+     * opaque waiting overlay still hides the stale frame.
+     */
+    private fun clearSurfaceToBlack(holder: SurfaceHolder) {
+        val canvas: Canvas = try {
+            holder.lockCanvas() ?: return
+        } catch (e: Exception) {
+            Log.w(TAG, "clearSurfaceToBlack: lockCanvas failed (${e.message})")
+            return
+        }
+        try {
+            canvas.drawColor(Color.BLACK)
+        } finally {
+            try { holder.unlockCanvasAndPost(canvas) } catch (_: Exception) { /* best-effort */ }
+        }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {

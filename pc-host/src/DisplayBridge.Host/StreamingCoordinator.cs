@@ -80,6 +80,19 @@ public sealed class StreamingCoordinator : IDisposable
     private bool? _lastKnownAdbConnected;
     private int _adbPollInProgress;
 
+    /// <summary>
+    /// Session 19 "ghost display" fix: our belief of whether the "VDD by
+    /// MTT" device node is currently ENABLED, so the reconcile loop only
+    /// shells out to devcon when the desired state actually differs (no 7s
+    /// spam). Null = unknown at startup, forcing the first reconcile to
+    /// assert whatever state it computes. Replaces the old edge-only
+    /// _lastKnownAdbConnected driver logic, which got stuck "enabled"
+    /// forever whenever adb went Indeterminate on the disconnect edge
+    /// (flaky adb server) -- the exact bug that left a phantom monitor with
+    /// no tablet, no ADB, no active session (user report 2026-07-06).
+    /// </summary>
+    private bool? _driverEnabledBelief;
+
     // ADB reverse tunnel lifecycle task (session 18, RC1-FIX; see
     // docs/RCA-v2-android-connect-adb-reverse-lifecycle.md): the Host never
     // set up `adb reverse tcp:29500/29501` itself -- adb flushes ALL reverse
@@ -99,7 +112,13 @@ public sealed class StreamingCoordinator : IDisposable
     /// has a chance to enumerate the device (task brief: "để không tắt
     /// driver ngay lúc app vừa mở khi user còn đang cắm cáp").
     /// </summary>
-    internal static readonly TimeSpan AdbPollFirstDelay = TimeSpan.FromSeconds(20);
+    // Session 19: shortened 20s -> 5s. The old 20s existed so the driver
+    // wasn't "yanked" while a user was still plugging in the cable, but the
+    // reconcile is now session-aware (a live control-socket client keeps the
+    // driver enabled regardless of adb timing), so a short first check is
+    // safe AND kills any leftover phantom monitor from a previous session
+    // within 5s of the Host launching instead of 20s.
+    internal static readonly TimeSpan AdbPollFirstDelay = TimeSpan.FromSeconds(5);
 
     /// <summary>Steady-state poll interval once the first check has run (task brief: mỗi 5-10 giây).</summary>
     internal static readonly TimeSpan AdbPollInterval = TimeSpan.FromSeconds(7);
@@ -351,45 +370,25 @@ public sealed class StreamingCoordinator : IDisposable
         try
         {
             var connState = _adbChecker.CheckConnectionState();
-            if (connState == AdbConnectionState.Indeterminate)
-            {
-                Log?.Invoke("ADB poll: khong xac dinh duoc trang thai thiet bi (adb.exe khong tim thay hoac loi/timeout) -- giu nguyen trang thai driver hien tai.");
-                return;
-            }
 
             var connected = connState == AdbConnectionState.Connected;
 
             // Session 18 (RC1-FIX): re-apply adb reverse tunnels on EVERY tick
             // while Connected, regardless of whether the connection state just
             // transitioned -- the tunnels can vanish (adb server restart / USB
-            // replug) while the state stays Connected. Runs BEFORE the
-            // transition short-circuit below so it isn't skipped on steady
-            // Connected ticks. Idempotent + self-quieting (see
-            // EnsureReverseTunnels / AdbReverseManager.EnsureReverse).
+            // replug) while the state stays Connected. Idempotent +
+            // self-quieting (see EnsureReverseTunnels).
             if (connected)
             {
                 EnsureReverseTunnels();
             }
 
-            // Driver enable/disable stays TRANSITION-ONLY (the session-15
-            // debounce): only shell out to devcon when the connection state
-            // actually flipped, never every 7s.
-            if (_lastKnownAdbConnected.HasValue && _lastKnownAdbConnected.Value == connected)
-            {
-                return; // no real change since last check -- nothing to do for the driver
-            }
-            _lastKnownAdbConnected = connected;
-
-            if (connected)
-            {
-                var (ok, message) = _driverManager.EnableDevice();
-                Log?.Invoke($"ADB device da ket noi lai -- bat lai 'VDD by MTT' (ok={ok}): {message}");
-            }
-            else
-            {
-                var (ok, message) = _driverManager.DisableDevice();
-                Log?.Invoke($"Khong co ADB device nao ket noi -- tam thoi tat 'VDD by MTT' de tranh nham thanh 2 man hinh (ok={ok}): {message}");
-            }
+            // Session 19 ghost-display fix: reconcile the driver to its
+            // DESIRED level state (idempotent), replacing the old
+            // transition-only logic that got stuck "enabled" whenever adb
+            // hiccuped to Indeterminate on the disconnect edge.
+            ReconcileDriverState(connState);
+            _lastKnownAdbConnected = connected; // kept for diagnostics/back-compat
         }
         catch (Exception ex)
         {
@@ -401,6 +400,49 @@ public sealed class StreamingCoordinator : IDisposable
         {
             System.Threading.Interlocked.Exchange(ref _adbPollInProgress, 0);
         }
+    }
+
+    /// <summary>
+    /// Session 19 "ghost display" fix: drives the "VDD by MTT" device node
+    /// to the state it SHOULD be in, given whether a tablet is really
+    /// present, and only shells out to devcon when that differs from what we
+    /// last applied (<see cref="_driverEnabledBelief"/>) -- so it's safe to
+    /// call every 7s poll tick without redundant devcon churn.
+    ///
+    /// Desired ENABLED iff a tablet is genuinely present, confirmed by
+    /// EITHER of two independent signals:
+    ///   1. our own control socket currently holds a live client -- i.e. a
+    ///      streaming session is in progress RIGHT NOW (authoritative; this
+    ///      is what keeps the display from being yanked mid-stream even if
+    ///      `adb devices` momentarily returns Indeterminate on a flaky adb
+    ///      server), or
+    ///   2. `adb devices` reports a Connected authorized device.
+    /// Anything else -- Disconnected, or Indeterminate with no active
+    /// session -- means "no tablet", so the driver is DISABLED and Windows
+    /// stops showing a phantom second monitor. This directly satisfies the
+    /// user requirement: no app-window session => no virtual display.
+    /// </summary>
+    private void ReconcileDriverState(AdbConnectionState connState)
+    {
+        var hasLiveSession = _controlServer?.HasClient == true;
+        var desiredEnabled = hasLiveSession || connState == AdbConnectionState.Connected;
+
+        if (_driverEnabledBelief.HasValue && _driverEnabledBelief.Value == desiredEnabled)
+        {
+            return; // already in the desired state -- don't touch devcon
+        }
+
+        if (desiredEnabled)
+        {
+            var (ok, message) = _driverManager.EnableDevice();
+            Log?.Invoke($"Co tablet ket noi (session={hasLiveSession}, adb={connState}) -- bat 'VDD by MTT' (ok={ok}): {message}");
+        }
+        else
+        {
+            var (ok, message) = _driverManager.DisableDevice();
+            Log?.Invoke($"Khong co tablet (session=false, adb={connState}) -- tat 'VDD by MTT' de khong de lai man hinh ma (ok={ok}): {message}");
+        }
+        _driverEnabledBelief = desiredEnabled;
     }
 
     /// <summary>
