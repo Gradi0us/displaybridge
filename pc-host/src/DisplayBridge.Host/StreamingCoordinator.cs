@@ -93,6 +93,9 @@ public sealed class StreamingCoordinator : IDisposable
     /// </summary>
     private bool? _driverEnabledBelief;
 
+    /// <summary>Consecutive poll ticks with no live session -- see ReconcileDriverState's disable debounce.</summary>
+    private int _noSessionTicks;
+
     // ADB reverse tunnel lifecycle task (session 18, RC1-FIX; see
     // docs/RCA-v2-android-connect-adb-reverse-lifecycle.md): the Host never
     // set up `adb reverse tcp:29500/29501` itself -- adb flushes ALL reverse
@@ -426,6 +429,22 @@ public sealed class StreamingCoordinator : IDisposable
         var hasLiveSession = _controlServer?.HasClient == true;
         var desiredEnabled = hasLiveSession;
 
+        // Debounce the DISABLE direction only (2 consecutive no-session
+        // ticks = ~14s): the Android app restarts itself to apply settings
+        // and reconnects within a few seconds -- one unlucky 7s-tick sample
+        // during that window used to yank the driver (and with it the live
+        // DXGI duplication) out from under a session that was about to
+        // resume (live log 10:30:48). Enabling stays immediate.
+        if (!desiredEnabled)
+        {
+            _noSessionTicks++;
+            if (_noSessionTicks < 2) return;
+        }
+        else
+        {
+            _noSessionTicks = 0;
+        }
+
         if (_driverEnabledBelief.HasValue && _driverEnabledBelief.Value == desiredEnabled)
         {
             return; // already in the desired state -- don't touch devcon
@@ -440,6 +459,15 @@ public sealed class StreamingCoordinator : IDisposable
         {
             var (ok, message) = _driverManager.DisableDevice();
             Log?.Invoke($"Khong co tablet (session=false, adb={connState}) -- tat 'VDD by MTT' de khong de lai man hinh ma (ok={ok}): {message}");
+
+            // Disabling the device kills the live DXGI duplication under the
+            // running frame source -- AcquireFrame fails forever after this.
+            // Invalidate the applied-mode memory so the NEXT CAPS takes the
+            // FULL apply path (enable -> EnsureReady -> recreate) instead of
+            // the RC-A "unchanged mode" skip, which would leave a dead
+            // capture serving zero frames while the app waits forever
+            // (live log 10:30:55, user report "mac o cho ket noi pc").
+            _appliedMode = null;
         }
         _driverEnabledBelief = desiredEnabled;
     }
