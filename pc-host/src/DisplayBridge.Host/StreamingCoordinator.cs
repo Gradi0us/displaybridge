@@ -1086,6 +1086,26 @@ public sealed class StreamingCoordinator : IDisposable
     {
         if (_disposed) return;
         Stop();
+
+        // Session 19 "ghost display" fix (user report: Windows keeps showing
+        // a second monitor with no tablet, no ADB, no Host running). The
+        // no-ADB auto-disable poll only exists INSIDE a running Host
+        // process; quitting the Host used to leave the "VDD by MTT" device
+        // node enabled at the PnP level forever. Best-effort disable on
+        // graceful shutdown (tray "Thoat" / WM_ENDSESSION) so no Host = no
+        // phantom monitor. A crash/kill still can't run this -- the next
+        // Host launch's poll (or its own exit) cleans up then. Never-throw:
+        // exiting must not be blockable by a devcon failure.
+        try
+        {
+            var (ok, message) = _driverManager.DisableDevice();
+            Log?.Invoke($"Shutdown: tat 'VDD by MTT' de khong de lai man hinh ma (ok={ok}): {message}");
+        }
+        catch (Exception ex)
+        {
+            Log?.Invoke($"Shutdown: loi khi tat driver (bo qua): {ex.Message}");
+        }
+
         _controlServer?.Dispose();
         _videoServer?.Dispose();
         _disposed = true;
