@@ -22,6 +22,53 @@ public partial class App : Application
     /// </summary>
     public StreamingCoordinator? Coordinator => _streamingCoordinator;
 
+    /// <summary>
+    /// Session 19: true once a full quit is underway. MainWindow.Closing
+    /// checks this so a genuine quit is allowed to close the window instead
+    /// of being intercepted into the minimize-to-tray behavior.
+    /// </summary>
+    public bool IsQuitting { get; private set; }
+
+    /// <summary>
+    /// Session 19 (user report: tray icon hidden in the Win11 overflow, so
+    /// the only reachable "quit" was Task Manager, and even then background
+    /// work kept running). Fully shuts the app down from anywhere -- the
+    /// tray "Thoát" and the new MainWindow "Thoát" button both call this:
+    ///   1. hide the tray icon immediately (visible feedback that it's gone),
+    ///   2. stop the background coordinator (ADB poll, sockets) AND disable
+    ///      the VDD so no phantom monitor is left behind -- on a BOUNDED
+    ///      worker so a slow/hung devcon can't wedge the quit,
+    ///   3. Environment.Exit(0) to GUARANTEE the process and every background
+    ///      thread actually terminate (the user should never need Task
+    ///      Manager again).
+    /// </summary>
+    public void QuitApplication()
+    {
+        if (IsQuitting) return;
+        IsQuitting = true;
+
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+            _trayIcon = null;
+        }
+
+        try
+        {
+            // Coordinator.Dispose() shells out to devcon to disable the
+            // driver (~4s); bound it so a hung devcon can't block the quit.
+            var cleanup = System.Threading.Tasks.Task.Run(() => _streamingCoordinator?.Dispose());
+            cleanup.Wait(TimeSpan.FromSeconds(6));
+        }
+        catch
+        {
+            // best-effort: quitting must not be blockable by cleanup failure
+        }
+
+        Environment.Exit(0);
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -78,8 +125,8 @@ public partial class App : Application
         settingsMenuItem.Click += (_, _) =>
             new SettingsWindow(coordinatorForSettings!.SettingsStore, coordinatorForSettings.CurrentDeviceCaps).ShowDialog();
 
-        var exitMenuItem = new ToolStripMenuItem("Thoát");
-        exitMenuItem.Click += (_, _) => Shutdown();
+        var exitMenuItem = new ToolStripMenuItem("Thoát (tắt hẳn, dừng chạy nền)");
+        exitMenuItem.Click += (_, _) => QuitApplication();
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add(_statusMenuItem);

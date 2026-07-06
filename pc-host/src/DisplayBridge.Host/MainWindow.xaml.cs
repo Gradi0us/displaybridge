@@ -25,8 +25,23 @@ public partial class MainWindow : Window
     /// </summary>
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        // Session 19: a genuine quit (tray "Thoát" / the Exit button) sets
+        // App.IsQuitting and terminates the process itself, so don't fight
+        // it here. Only a plain user [X] (IsQuitting == false) gets
+        // intercepted into minimize-to-tray.
+        if ((Application.Current as App)?.IsQuitting == true) return;
         e.Cancel = true;
         Hide();
+    }
+
+    /// <summary>
+    /// Session 19: fully quits (stops background run + disables the VDD),
+    /// reachable straight from the window since the Win11 tray overflow hid
+    /// the tray "Thoát". See App.QuitApplication.
+    /// </summary>
+    private void ExitButton_Click(object sender, RoutedEventArgs e)
+    {
+        (Application.Current as App)?.QuitApplication();
     }
 
     /// <summary>

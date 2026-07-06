@@ -6,13 +6,27 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock Grid.Row="0" x:Name="StatusText" Text="DisplayBridge Host — chưa kết nối"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    FontSize="16" />
-        <Button Grid.Row="1" x:Name="SettingsButton" Content="Settings..."
-                HorizontalAlignment="Center" Margin="0,0,0,16" Width="120"
-                Click="SettingsButton_Click" />
+
+        <!-- Session 19: the window [X] minimizes to tray (background run,
+             session 18). Windows 11 hides tray icons in the overflow, so a
+             user couldn't find the tray "Thoát" and had to kill the process
+             from Task Manager. This explicit "Thoát" button fully quits
+             (stops background poll/servers + disables the VDD so no phantom
+             monitor is left behind), reachable straight from the window. -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+            <Button x:Name="SettingsButton" Content="Settings..."
+                    Width="120" Margin="0,0,8,0" Click="SettingsButton_Click" />
+            <Button x:Name="ExitButton" Content="Thoát"
+                    Width="120" Click="ExitButton_Click" />
+        </StackPanel>
+        <TextBlock Grid.Row="2" Text="Đóng cửa sổ (X) = thu nhỏ xuống khay, vẫn chạy nền. Bấm Thoát để tắt hẳn."
+                   HorizontalAlignment="Center" Margin="0,0,0,12" FontSize="10"
+                   Foreground="Gray" TextWrapping="Wrap" TextAlignment="Center" />
     </Grid>
 </Window>
